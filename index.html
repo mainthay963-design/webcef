@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Toast</title>
+<style>
+  :root{
+    --safe-t:env(safe-area-inset-top,0px);
+    --safe-r:env(safe-area-inset-right,0px);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;background:transparent;overflow:hidden;
+    font-family:"Inter",-apple-system,"Segoe UI",Roboto,"Noto Sans Thai","Noto Sans",sans-serif;
+    -webkit-user-select:none;user-select:none}
+
+  #stack{
+    position:fixed;top:calc(var(--safe-t) + 14px);right:calc(var(--safe-r) + 14px);
+    width:min(360px,92vw);display:flex;flex-direction:column;gap:10px;
+    pointer-events:none;
+  }
+
+  .toast{
+    --rgb:96,165,250;
+    position:relative;overflow:hidden;pointer-events:auto;touch-action:pan-y;
+    display:flex;align-items:center;gap:14px;min-height:64px;
+    padding:14px 16px 16px 14px;border-radius:16px;color:#fff;
+    background:
+      radial-gradient(120% 140% at 0% 0%,rgba(var(--rgb),.22),transparent 60%),
+      rgba(16,19,26,.86);
+    border:1px solid rgba(var(--rgb),.35);
+    box-shadow:0 10px 30px rgba(0,0,0,.45),0 0 24px rgba(var(--rgb),.18);
+    -webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);
+    opacity:0;transform:translateX(110%) scale(.96);
+    transition:transform .45s cubic-bezier(.22,1.2,.36,1),opacity .3s ease;
+  }
+  .toast.show{opacity:1;transform:none}
+  .toast.hide{opacity:0;transform:translateX(110%) scale(.96);transition:transform .3s ease-in,opacity .25s ease}
+  .toast.drag{transition:none}
+
+  .toast.success{--rgb:52,211,153}
+  .toast.warning{--rgb:251,191,36}
+  .toast.error{--rgb:248,113,113}
+  .toast.info{--rgb:96,165,250}
+
+  .ico{
+    flex:none;width:40px;height:40px;border-radius:12px;display:grid;place-items:center;
+    color:rgb(var(--rgb));background:rgba(var(--rgb),.15);
+    box-shadow:inset 0 0 0 1px rgba(var(--rgb),.3);
+  }
+  .ico svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
+  .ico .d{stroke-dasharray:40;stroke-dashoffset:40}
+  .toast.show .ico .d{animation:draw .55s .15s ease forwards}
+  .toast.warning.show .ico{animation:wobble .6s .2s ease}
+  .toast.error.show .ico{animation:shake .45s .2s ease}
+  @keyframes draw{to{stroke-dashoffset:0}}
+  @keyframes shake{0%,100%{transform:none}25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
+  @keyframes wobble{0%,100%{transform:none}30%{transform:rotate(-8deg)}60%{transform:rotate(6deg)}}
+
+  .txt{flex:1;min-width:0}
+  .ttl{margin:0 0 2px;font-size:15px;font-weight:700;letter-spacing:.2px;line-height:1.25;color:rgb(var(--rgb))}
+  .msg{margin:0;font-size:13.5px;line-height:1.4;color:rgba(255,255,255,.88);word-break:break-word}
+
+  .x{
+    flex:none;width:32px;height:32px;margin:-6px -6px -6px 0;border:0;border-radius:50%;
+    background:transparent;color:rgba(255,255,255,.55);font-size:20px;line-height:1;
+  }
+  .x:active{background:rgba(255,255,255,.12)}
+
+  .bar{position:absolute;left:0;right:0;bottom:0;height:3px;background:rgba(255,255,255,.06)}
+  .bar i{display:block;height:100%;width:100%;transform-origin:left;
+    background:linear-gradient(90deg,rgba(var(--rgb),.6),rgb(var(--rgb)));
+    animation:shrink linear forwards}
+  .toast.paused .bar i{animation-play-state:paused}
+  @keyframes shrink{from{transform:scaleX(1)}to{transform:scaleX(0)}}
+
+  #demo{position:fixed;left:14px;bottom:14px;display:none;gap:8px;flex-wrap:wrap;z-index:9}
+  #demo button{border:0;border-radius:10px;padding:10px 14px;font:600 13px inherit;color:#111;cursor:pointer}
+  @media (max-height:420px){.toast{min-height:56px;padding:10px 14px 12px 12px}}
+</style>
+</head>
+<body>
+<div id="stack"></div>
+<div id="demo"></div>
+
+<script>
+(function () {
+  var MAX = 4, DEFAULT_MS = 3500;
+  var ICONS = {
+    success:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5" opacity=".45"/><path class="d" d="M7.5 12.5l3.2 3.2 5.8-7"/></svg>',
+    warning:'<svg viewBox="0 0 24 24"><path d="M12 3.2L2.6 20h18.8L12 3.2z" opacity=".45"/><path class="d" d="M12 9.5v4.6M12 17.4v.1"/></svg>',
+    error:  '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5" opacity=".45"/><path class="d" d="M8.6 8.6l6.8 6.8M15.4 8.6l-6.8 6.8"/></svg>',
+    info:   '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5" opacity=".45"/><path class="d" d="M12 11v5.5M12 7.6v.1"/></svg>'
+  };
+  var TITLES = {success:'Success', warning:'Warning', error:'Error', info:'Info'};
+  var stack = document.getElementById('stack');
+
+  function strip(s){ return String(s == null ? '' : s).replace(/\{[0-9a-fA-F]{6}\}/g, ''); }
+
+  function dismiss(el){
+    if (!el || el._gone) return; el._gone = true;
+    el.classList.remove('show'); el.classList.add('hide');
+    setTimeout(function(){ el.parentNode && el.parentNode.removeChild(el); }, 320);
+  }
+
+  function attachSwipe(el){
+    var sx = 0, dx = 0, on = false;
+    el.addEventListener('pointerdown', function(e){ on = true; sx = e.clientX; dx = 0; el.classList.add('paused','drag'); el.setPointerCapture(e.pointerId); });
+    el.addEventListener('pointermove', function(e){
+      if (!on) return; dx = Math.max(0, e.clientX - sx);
+      el.style.transform = 'translateX(' + dx + 'px)'; el.style.opacity = 1 - dx / 260;
+    });
+    function end(){
+      if (!on) return; on = false; el.classList.remove('drag', 'paused');
+      el.style.transform = ''; el.style.opacity = '';
+      if (dx > 70) dismiss(el);
+    }
+    el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end);
+  }
+
+  function showToast(type, title, message, ms){
+    if (!ICONS[type]) type = 'info';
+    title = strip(title); message = strip(message);
+    ms = Math.max(1200, Math.min(15000, parseInt(ms, 10) || DEFAULT_MS));
+
+    var last = stack.lastElementChild;
+    var key = type + '|' + title + '|' + message;
+    if (last && !last._gone && last._key === key) return;
+
+    while (stack.querySelectorAll('.toast:not(.hide)').length >= MAX) {
+      dismiss(stack.querySelector('.toast:not(.hide)'));
+    }
+
+    var el = document.createElement('div');
+    el.className = 'toast ' + type; el._key = key;
+    el.setAttribute('role', 'status');
+
+    var ico = document.createElement('div'); ico.className = 'ico'; ico.innerHTML = ICONS[type];
+    var box = document.createElement('div'); box.className = 'txt';
+    var t = document.createElement('p'); t.className = 'ttl'; t.textContent = title || TITLES[type];
+    var m = document.createElement('p'); m.className = 'msg'; m.textContent = message;
+    box.appendChild(t); if (message) box.appendChild(m);
+
+    var x = document.createElement('button'); x.className = 'x'; x.innerHTML = '&times;'; x.setAttribute('aria-label', 'Close');
+    x.addEventListener('click', function(e){ e.stopPropagation(); dismiss(el); });
+
+    var bar = document.createElement('div'); bar.className = 'bar';
+    var fill = document.createElement('i'); fill.style.animationDuration = ms + 'ms';
+    fill.addEventListener('animationend', function(){ dismiss(el); });
+    bar.appendChild(fill);
+
+    el.appendChild(ico); el.appendChild(box); el.appendChild(x); el.appendChild(bar);
+    attachSwipe(el);
+    stack.appendChild(el);
+    requestAnimationFrame(function(){ requestAnimationFrame(function(){ el.classList.add('show'); }); });
+  }
+
+  window.showToast = showToast;
+  window.clearToasts = function(){ [].slice.call(stack.children).forEach(dismiss); };
+
+  // SAMPMobileCefUI (CefShowNotification): data = [title, message, type, duration]
+  function bind(){
+    if (typeof Cef === 'undefined') return false;
+    Cef.registerEventCallback('cef_ui_notification', function(json){
+      try {
+        var d = typeof json === 'string' ? JSON.parse(json) : json;
+        showToast(String(d[2] || 'info').toLowerCase(), d[0], d[1], d[3]);
+      } catch (e) { console.log('toast parse error', e); }
+    });
+    return true;
+  }
+  if (!bind()) {
+    var tries = 0, iv = setInterval(function(){ if (bind() || ++tries > 20) clearInterval(iv); }, 250);
+  }
+
+  // Demo mode: only when opened in a normal browser (no Cef)
+  if (typeof Cef === 'undefined') {
+    var demo = document.getElementById('demo'); demo.style.display = 'flex';
+    [['success','#34d399','Purchase completed!'],['warning','#fbbf24','Fuel is running low.'],
+     ['error','#f87171','Not enough money.'],['info','#60a5fa','Press Y to open the phone.']].forEach(function(b){
+      var btn = document.createElement('button'); btn.textContent = b[0]; btn.style.background = b[1];
+      btn.onclick = function(){ showToast(b[0], '', b[2], 4000); }; demo.appendChild(btn);
+    });
+  }
+})();
+</script>
+</body>
+  </html>
