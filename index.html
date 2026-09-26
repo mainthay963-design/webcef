@@ -158,22 +158,31 @@
   window.showToast = showToast;
   window.clearToasts = function(){ [].slice.call(stack.children).forEach(dismiss); };
 
-  // SAMPMobileCefUI (CefShowNotification): data = [title, message, type, duration]
+  // Lắng nghe linh hoạt các sự kiện từ Pawn / SAMPMobileCef
   function bind(){
     if (typeof Cef === 'undefined') return false;
-    Cef.registerEventCallback('cef_ui_notification', function(json){
-      try {
-        var d = typeof json === 'string' ? JSON.parse(json) : json;
-        showToast(String(d[2] || 'info').toLowerCase(), d[0], d[1], d[3]);
-      } catch (e) { console.log('toast parse error', e); }
+    
+    var eventNames = ['cef_ui_notification', 'notification', 'ShowNotification', 'toast'];
+    eventNames.forEach(function(eventName) {
+      Cef.registerEventCallback(eventName, function(json){
+        try {
+          var d = typeof json === 'string' ? JSON.parse(json) : json;
+          if (Array.isArray(d)) {
+            showToast(String(d[2] || 'info').toLowerCase(), d[0], d[1], d[3]);
+          } else if (d) {
+            showToast(String(d.type || 'info').toLowerCase(), d.title, d.message, d.duration);
+          }
+        } catch (e) { console.log('toast parse error', e); }
+      });
     });
     return true;
   }
+
   if (!bind()) {
     var tries = 0, iv = setInterval(function(){ if (bind() || ++tries > 20) clearInterval(iv); }, 250);
   }
 
-  // Demo mode: only when opened in a normal browser (no Cef)
+  // Demo mode: chỉ hiện khi mở trực tiếp trên trình duyệt ngoài (không có CEF)
   if (typeof Cef === 'undefined') {
     var demo = document.getElementById('demo'); demo.style.display = 'flex';
     [['success','#34d399','Purchase completed!'],['warning','#fbbf24','Fuel is running low.'],
@@ -185,4 +194,4 @@
 })();
 </script>
 </body>
-  </html>
+</html>
