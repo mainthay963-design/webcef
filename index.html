@@ -4,9 +4,6 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Toast CEF</title>
-<!-- ĐÃ THÊM: Eruda debug console - bấm nút nổi để xem console.log/lỗi ngay trong game -->
-<script src="https://cdn.jsdelivr.net/npm/eruda"></script>
-<script>eruda.init();</script>
 <style>
   :root{
     --safe-t:env(safe-area-inset-top,0px);
@@ -80,14 +77,42 @@
   #demo{position:fixed;left:14px;bottom:14px;display:none;gap:8px;flex-wrap:wrap;z-index:9}
   #demo button{border:0;border-radius:10px;padding:10px 14px;font:600 13px inherit;color:#111;cursor:pointer}
   @media (max-height:420px){.toast{min-height:56px;padding:10px 14px 12px 12px}}
+
+  /* ĐÃ THÊM: khung debug log tự vẽ, không phụ thuộc CDN ngoài, luôn hiển thị được */
+  #dbg{
+    position:fixed;left:0;top:0;right:0;max-height:45vh;overflow-y:auto;
+    background:rgba(0,0,0,.85);color:#0f0;font:11px/1.4 monospace;
+    padding:6px 8px;z-index:999999;white-space:pre-wrap;word-break:break-all;
+    pointer-events:auto;border-bottom:2px solid #0f0;
+  }
+  #dbg .ln{border-bottom:1px dashed rgba(0,255,0,.2);padding:2px 0}
+  #dbg .err{color:#ff6b6b}
 </style>
 </head>
 <body>
+<div id="dbg"></div>
 <div id="stack"></div>
 <div id="demo"></div>
 
 <script>
 (function () {
+  // =====================================================================
+  // ĐÃ THÊM: Debug log tự vẽ trực tiếp lên màn hình (không dùng CDN ngoài,
+  // để loại trừ khả năng WebView chặn domain bên ngoài như jsdelivr).
+  // =====================================================================
+  var dbgBox = document.getElementById('dbg');
+  function dlog(msg, isErr){
+    var line = document.createElement('div');
+    line.className = 'ln' + (isErr ? ' err' : '');
+    line.textContent = '[' + new Date().toLocaleTimeString() + '] ' + msg;
+    dbgBox.appendChild(line);
+    dbgBox.scrollTop = dbgBox.scrollHeight;
+  }
+
+  dlog('=== SCRIPT STARTED ===');
+  dlog('typeof Cef = ' + typeof Cef);
+  dlog('window keys chua "cef": ' + Object.keys(window).filter(function(k){return k.toLowerCase().indexOf('cef')>-1;}).join(', ') || '(none)');
+
   var MAX = 4, DEFAULT_MS = 3500;
   var ICONS = {
     success:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5" opacity=".45"/><path class="d" d="M7.5 12.5l3.2 3.2 5.8-7"/></svg>',
@@ -122,7 +147,7 @@
   }
 
   function showToast(type, title, message, ms){
-    console.log('[DEBUG] showToast called with:', type, title, message, ms);
+    dlog('showToast() called -> type=' + type + ' title=' + title + ' message=' + message + ' ms=' + ms);
     if (!ICONS[type]) type = 'info';
     title = strip(title); message = strip(message);
     ms = Math.max(1200, Math.min(15000, parseInt(ms, 10) || DEFAULT_MS));
@@ -159,48 +184,37 @@
     requestAnimationFrame(function(){ requestAnimationFrame(function(){ el.classList.add('show'); }); });
   }
 
-  // Đẩy hàm ra toàn cục để Pawn có thể gọi được
   window.showToast = showToast;
   window.clearToasts = function(){ [].slice.call(stack.children).forEach(dismiss); };
 
-  // ĐÃ THÊM: Bộ bắt lỗi JS (Bắt buộc phải có để debug)
-  // Nếu lệnh CefExecuteJavaScript từ game bị sai cú pháp, nó sẽ hiện lỗi lên màn hình
   window.onerror = function(message, source, lineno, colno, error) {
-      console.log('[DEBUG] window.onerror:', message, source, lineno, colno);
+      dlog('window.onerror: ' + message + ' @ line ' + lineno, true);
       showToast('error', 'Lỗi Cú Pháp JS', message, 6000);
       return true;
   };
 
-  // ĐÃ THÊM: Log ngay khi script chạy, để biết Cef đã được inject vào lúc này chưa
-  console.log('[DEBUG] Script started. typeof Cef =', typeof Cef);
-  console.log('[DEBUG] window keys chứa "cef":', Object.keys(window).filter(function(k){ return k.toLowerCase().indexOf('cef') > -1; }));
-
   // =====================================================================
   // FIX: Đăng ký lắng nghe event "cef_ui_notification" gửi từ server qua
-  // CefShowNotification (SAMPMobileCefUI.inc). Đây là phần bị thiếu khiến
-  // toast không bao giờ hiển thị dù server đã gửi event thành công.
-  // Theo tài liệu chính thức: Cef.registerEventCallback(eventName, callback)
-  // Payload là JSON Array theo thứ tự [title, message, type, duration].
+  // CefShowNotification (SAMPMobileCefUI.inc).
   // =====================================================================
   if (typeof Cef !== 'undefined') {
-    console.log('[DEBUG] Cef object found, registering "cef_ui_notification" callback...');
-    Cef.registerEventCallback("cef_ui_notification", function (eventDataJson) {
-      console.log('[DEBUG] cef_ui_notification received, raw data:', eventDataJson);
-      try {
-        var data = JSON.parse(eventDataJson);
-        var title = data[0];
-        var message = data[1];
-        var type = data[2];
-        var duration = data[3];
-        console.log('[DEBUG] Parsed -> title:', title, 'message:', message, 'type:', type, 'duration:', duration);
-        showToast(type, title, message, duration);
-      } catch (e) {
-        console.log('[DEBUG] Parse error:', e);
-        showToast('error', 'Loi Parse Notification', String(e), 5000);
-      }
-    });
+    dlog('Cef object FOUND. Registering "cef_ui_notification" callback...');
+    try {
+      Cef.registerEventCallback("cef_ui_notification", function (eventDataJson) {
+        dlog('EVENT RECEIVED cef_ui_notification: ' + eventDataJson);
+        try {
+          var data = JSON.parse(eventDataJson);
+          showToast(data[2], data[0], data[1], data[3]);
+        } catch (e) {
+          dlog('JSON parse error: ' + e, true);
+        }
+      });
+      dlog('registerEventCallback() call completed without throwing.');
+    } catch (e) {
+      dlog('registerEventCallback() THREW an error: ' + e, true);
+    }
   } else {
-    console.log('[DEBUG] Cef is undefined at script load time! Bridge chua duoc inject.');
+    dlog('Cef is UNDEFINED at script load time! Bridge chua duoc inject luc nay.', true);
   }
 
   // Demo mode
@@ -212,6 +226,8 @@
       btn.onclick = function(){ showToast(b[0], '', b[2], 4000); }; demo.appendChild(btn);
     });
   }
+
+  dlog('=== SCRIPT INIT DONE ===');
 })();
 </script>
 </body>
