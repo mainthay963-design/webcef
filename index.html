@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Toast CEF</title>
+<!-- ĐÃ THÊM: Eruda debug console - bấm nút nổi để xem console.log/lỗi ngay trong game -->
+<script src="https://cdn.jsdelivr.net/npm/eruda"></script>
+<script>eruda.init();</script>
 <style>
   :root{
     --safe-t:env(safe-area-inset-top,0px);
@@ -14,7 +17,6 @@
     font-family:"Inter",-apple-system,"Segoe UI",Roboto,"Noto Sans Thai","Noto Sans",sans-serif;
     -webkit-user-select:none;user-select:none}
 
-  /* ĐÃ SỬA: Thêm z-index: 99999 để đảm bảo thông báo luôn nằm trên cùng, không bị game che mất */
   #stack{
     position:fixed;top:calc(var(--safe-t) + 14px);right:calc(var(--safe-r) + 14px);
     width:min(360px,92vw);display:flex;flex-direction:column;gap:10px;
@@ -120,6 +122,7 @@
   }
 
   function showToast(type, title, message, ms){
+    console.log('[DEBUG] showToast called with:', type, title, message, ms);
     if (!ICONS[type]) type = 'info';
     title = strip(title); message = strip(message);
     ms = Math.max(1200, Math.min(15000, parseInt(ms, 10) || DEFAULT_MS));
@@ -163,9 +166,42 @@
   // ĐÃ THÊM: Bộ bắt lỗi JS (Bắt buộc phải có để debug)
   // Nếu lệnh CefExecuteJavaScript từ game bị sai cú pháp, nó sẽ hiện lỗi lên màn hình
   window.onerror = function(message, source, lineno, colno, error) {
+      console.log('[DEBUG] window.onerror:', message, source, lineno, colno);
       showToast('error', 'Lỗi Cú Pháp JS', message, 6000);
       return true;
   };
+
+  // ĐÃ THÊM: Log ngay khi script chạy, để biết Cef đã được inject vào lúc này chưa
+  console.log('[DEBUG] Script started. typeof Cef =', typeof Cef);
+  console.log('[DEBUG] window keys chứa "cef":', Object.keys(window).filter(function(k){ return k.toLowerCase().indexOf('cef') > -1; }));
+
+  // =====================================================================
+  // FIX: Đăng ký lắng nghe event "cef_ui_notification" gửi từ server qua
+  // CefShowNotification (SAMPMobileCefUI.inc). Đây là phần bị thiếu khiến
+  // toast không bao giờ hiển thị dù server đã gửi event thành công.
+  // Theo tài liệu chính thức: Cef.registerEventCallback(eventName, callback)
+  // Payload là JSON Array theo thứ tự [title, message, type, duration].
+  // =====================================================================
+  if (typeof Cef !== 'undefined') {
+    console.log('[DEBUG] Cef object found, registering "cef_ui_notification" callback...');
+    Cef.registerEventCallback("cef_ui_notification", function (eventDataJson) {
+      console.log('[DEBUG] cef_ui_notification received, raw data:', eventDataJson);
+      try {
+        var data = JSON.parse(eventDataJson);
+        var title = data[0];
+        var message = data[1];
+        var type = data[2];
+        var duration = data[3];
+        console.log('[DEBUG] Parsed -> title:', title, 'message:', message, 'type:', type, 'duration:', duration);
+        showToast(type, title, message, duration);
+      } catch (e) {
+        console.log('[DEBUG] Parse error:', e);
+        showToast('error', 'Loi Parse Notification', String(e), 5000);
+      }
+    });
+  } else {
+    console.log('[DEBUG] Cef is undefined at script load time! Bridge chua duoc inject.');
+  }
 
   // Demo mode
   if (typeof Cef === 'undefined') {
