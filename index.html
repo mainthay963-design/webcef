@@ -78,7 +78,7 @@
   #demo button{border:0;border-radius:10px;padding:10px 14px;font:600 13px inherit;color:#111;cursor:pointer}
   @media (max-height:420px){.toast{min-height:56px;padding:10px 14px 12px 12px}}
 
-  /* ĐÃ THÊM: khung debug log tự vẽ, không phụ thuộc CDN ngoài, luôn hiển thị được */
+  /* Khung debug log tự vẽ - bật/tắt bằng biến DEBUG trong script bên dưới */
   #dbg{
     position:fixed;left:0;top:0;right:0;max-height:45vh;overflow-y:auto;
     background:rgba(0,0,0,.85);color:#0f0;font:11px/1.4 monospace;
@@ -96,12 +96,14 @@
 
 <script>
 (function () {
-  // =====================================================================
-  // ĐÃ THÊM: Debug log tự vẽ trực tiếp lên màn hình (không dùng CDN ngoài,
-  // để loại trừ khả năng WebView chặn domain bên ngoài như jsdelivr).
-  // =====================================================================
+  // ===== BẬT/TẮT debug overlay tại đây. Để true khi cần soi lỗi, false khi chạy chính thức =====
+  var DEBUG = false;
+
   var dbgBox = document.getElementById('dbg');
+  if (!DEBUG && dbgBox) { dbgBox.remove(); dbgBox = null; }
+
   function dlog(msg, isErr){
+    if (!DEBUG || !dbgBox) return;
     var line = document.createElement('div');
     line.className = 'ln' + (isErr ? ' err' : '');
     line.textContent = '[' + new Date().toLocaleTimeString() + '] ' + msg;
@@ -110,8 +112,6 @@
   }
 
   dlog('=== SCRIPT STARTED ===');
-  dlog('typeof Cef = ' + typeof Cef);
-  dlog('window keys chua "cef": ' + Object.keys(window).filter(function(k){return k.toLowerCase().indexOf('cef')>-1;}).join(', ') || '(none)');
 
   var MAX = 4, DEFAULT_MS = 3500;
   var ICONS = {
@@ -147,7 +147,7 @@
   }
 
   function showToast(type, title, message, ms){
-    dlog('showToast() called -> type=' + type + ' title=' + title + ' message=' + message + ' ms=' + ms);
+    dlog('showToast() -> type=' + type + ' title=' + title + ' message=' + message + ' ms=' + ms);
     if (!ICONS[type]) type = 'info';
     title = strip(title); message = strip(message);
     ms = Math.max(1200, Math.min(15000, parseInt(ms, 10) || DEFAULT_MS));
@@ -194,32 +194,58 @@
   };
 
   // =====================================================================
-  // FIX: Đăng ký lắng nghe event "cef_ui_notification" gửi từ server qua
-  // CefShowNotification (SAMPMobileCefUI.inc).
+  // FIX CHÍNH: object "Cef" được native Android inject vào trang SAU khi
+  // script này đã chạy xong (không đồng bộ), nên kiểm tra "typeof Cef"
+  // đúng 1 lần lúc đầu luôn thấy "undefined" dù bridge thực ra vẫn hoạt
+  // động bình thường. Giải pháp: poll (kiểm tra lặp lại) mỗi 100ms cho
+  // tới khi Cef xuất hiện thật sự rồi mới registerEventCallback.
   // =====================================================================
-  if (typeof Cef !== 'undefined') {
-    dlog('Cef object FOUND. Registering "cef_ui_notification" callback...');
+  var pollAttempts = 0;
+  var maxPollAttempts = 100; // 100 x 100ms = tối đa 10 giây chờ
+
+  function registerCefCallbacks() {
+    dlog('Cef object FOUND sau ' + pollAttempts + ' lan poll (~' + (pollAttempts * 100) + 'ms). Dang ky callback...');
+
     try {
       Cef.registerEventCallback("cef_ui_notification", function (eventDataJson) {
         dlog('EVENT RECEIVED cef_ui_notification: ' + eventDataJson);
         try {
           var data = JSON.parse(eventDataJson);
-          showToast(data[2], data[0], data[1], data[3]);
+          var title = data[0];
+          var message = data[1];
+          var type = data[2];
+          var duration = data[3];
+          showToast(type, title, message, duration);
         } catch (e) {
           dlog('JSON parse error: ' + e, true);
         }
       });
-      dlog('registerEventCallback() call completed without throwing.');
+      dlog('registerEventCallback() OK.');
     } catch (e) {
-      dlog('registerEventCallback() THREW an error: ' + e, true);
+      dlog('registerEventCallback() THREW: ' + e, true);
     }
-  } else {
-    dlog('Cef is UNDEFINED at script load time! Bridge chua duoc inject luc nay.', true);
+
+    var demo = document.getElementById('demo');
+    if (demo) demo.style.display = 'none';
   }
 
-  // Demo mode
-  if (typeof Cef === 'undefined') {
+  function pollForCef() {
+    pollAttempts++;
+    if (typeof Cef !== 'undefined') {
+      registerCefCallbacks();
+      return;
+    }
+    if (pollAttempts >= maxPollAttempts) {
+      dlog('Cef VAN undefined sau ' + maxPollAttempts + ' lan poll. Bridge co the khong ton tai o APK nay.', true);
+      showDemoMode();
+      return;
+    }
+    setTimeout(pollForCef, 100);
+  }
+
+  function showDemoMode() {
     var demo = document.getElementById('demo'); demo.style.display = 'flex';
+    if (demo.childElementCount > 0) return;
     [['success','#34d399','Purchase completed!'],['warning','#fbbf24','Fuel is running low.'],
      ['error','#f87171','Not enough money.'],['info','#60a5fa','Press Y to open the phone.']].forEach(function(b){
       var btn = document.createElement('button'); btn.textContent = b[0]; btn.style.background = b[1];
@@ -227,7 +253,10 @@
     });
   }
 
-  dlog('=== SCRIPT INIT DONE ===');
+  dlog('Bat dau poll cho Cef (moi 100ms, toi da ' + maxPollAttempts + ' lan)...');
+  pollForCef();
+
+  dlog('=== SCRIPT INIT DONE (dang cho Cef neu chua san sang) ===');
 })();
 </script>
 </body>
