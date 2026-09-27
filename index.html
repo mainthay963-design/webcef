@@ -3,31 +3,31 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Toast CEF</title>
+<title>SA:MP Mobile CEF UI</title>
 <style>
   :root{
     --safe-t:env(safe-area-inset-top,0px);
     --safe-r:env(safe-area-inset-right,0px);
+    --safe-b:env(safe-area-inset-bottom,0px);
+    --accent:96,165,250;
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
   html,body{margin:0;height:100%;background:transparent;overflow:hidden;
     font-family:"Inter",-apple-system,"Segoe UI",Roboto,"Noto Sans Thai","Noto Sans",sans-serif;
     -webkit-user-select:none;user-select:none}
 
+  /* ===================== TOAST ===================== */
   #stack{
     position:fixed;top:calc(var(--safe-t) + 14px);right:calc(var(--safe-r) + 14px);
     width:min(360px,92vw);display:flex;flex-direction:column;gap:10px;
-    pointer-events:none; z-index: 99999; 
+    pointer-events:none; z-index: 99999;
   }
-
   .toast{
     --rgb:96,165,250;
     position:relative;overflow:hidden;pointer-events:auto;touch-action:pan-y;
     display:flex;align-items:center;gap:14px;min-height:64px;
     padding:14px 16px 16px 14px;border-radius:16px;color:#fff;
-    background:
-      radial-gradient(120% 140% at 0% 0%,rgba(var(--rgb),.22),transparent 60%),
-      rgba(16,19,26,.86);
+    background:radial-gradient(120% 140% at 0% 0%,rgba(var(--rgb),.22),transparent 60%),rgba(16,19,26,.86);
     border:1px solid rgba(var(--rgb),.35);
     box-shadow:0 10px 30px rgba(0,0,0,.45),0 0 24px rgba(var(--rgb),.18);
     -webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);
@@ -37,17 +37,10 @@
   .toast.show{opacity:1;transform:none}
   .toast.hide{opacity:0;transform:translateX(110%) scale(.96);transition:transform .3s ease-in,opacity .25s ease}
   .toast.drag{transition:none}
-
-  .toast.success{--rgb:52,211,153}
-  .toast.warning{--rgb:251,191,36}
-  .toast.error{--rgb:248,113,113}
-  .toast.info{--rgb:96,165,250}
-
-  .ico{
-    flex:none;width:40px;height:40px;border-radius:12px;display:grid;place-items:center;
-    color:rgb(var(--rgb));background:rgba(var(--rgb),.15);
-    box-shadow:inset 0 0 0 1px rgba(var(--rgb),.3);
-  }
+  .toast.success{--rgb:52,211,153} .toast.warning{--rgb:251,191,36}
+  .toast.error{--rgb:248,113,113} .toast.info{--rgb:96,165,250}
+  .ico{flex:none;width:40px;height:40px;border-radius:12px;display:grid;place-items:center;
+    color:rgb(var(--rgb));background:rgba(var(--rgb),.15);box-shadow:inset 0 0 0 1px rgba(var(--rgb),.3)}
   .ico svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
   .ico .d{stroke-dasharray:40;stroke-dashoffset:40}
   .toast.show .ico .d{animation:draw .55s .15s ease forwards}
@@ -56,35 +49,84 @@
   @keyframes draw{to{stroke-dashoffset:0}}
   @keyframes shake{0%,100%{transform:none}25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
   @keyframes wobble{0%,100%{transform:none}30%{transform:rotate(-8deg)}60%{transform:rotate(6deg)}}
-
   .txt{flex:1;min-width:0}
   .ttl{margin:0 0 2px;font-size:15px;font-weight:700;letter-spacing:.2px;line-height:1.25;color:rgb(var(--rgb))}
   .msg{margin:0;font-size:13.5px;line-height:1.4;color:rgba(255,255,255,.88);word-break:break-word}
-
-  .x{
-    flex:none;width:32px;height:32px;margin:-6px -6px -6px 0;border:0;border-radius:50%;
-    background:transparent;color:rgba(255,255,255,.55);font-size:20px;line-height:1;
-  }
+  .x{flex:none;width:32px;height:32px;margin:-6px -6px -6px 0;border:0;border-radius:50%;
+    background:transparent;color:rgba(255,255,255,.55);font-size:20px;line-height:1}
   .x:active{background:rgba(255,255,255,.12)}
-
   .bar{position:absolute;left:0;right:0;bottom:0;height:3px;background:rgba(255,255,255,.06)}
   .bar i{display:block;height:100%;width:100%;transform-origin:left;
-    background:linear-gradient(90deg,rgba(var(--rgb),.6),rgb(var(--rgb)));
-    animation:shrink linear forwards}
+    background:linear-gradient(90deg,rgba(var(--rgb),.6),rgb(var(--rgb)));animation:shrink linear forwards}
   .toast.paused .bar i{animation-play-state:paused}
   @keyframes shrink{from{transform:scaleX(1)}to{transform:scaleX(0)}}
 
+  /* ===================== OVERLAY DUNG CHUNG (dialog / ctx menu / inventory) ===================== */
+  .cef-backdrop{
+    position:fixed;inset:0;background:rgba(6,8,12,.55);-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px);
+    display:flex;align-items:center;justify-content:center;z-index:99990;
+    opacity:0;transition:opacity .2s ease;pointer-events:none;
+  }
+  .cef-backdrop.show{opacity:1;pointer-events:auto}
+
+  /* ===================== DIALOG (msgbox / input / password / list / confirm) ===================== */
+  .cef-modal{
+    width:min(340px,86vw);max-height:78vh;display:flex;flex-direction:column;
+    background:rgba(18,21,28,.94);border:1px solid rgba(var(--accent),.35);border-radius:18px;
+    box-shadow:0 20px 50px rgba(0,0,0,.5);color:#fff;transform:translateY(16px) scale(.97);opacity:0;
+    transition:transform .3s cubic-bezier(.22,1.2,.36,1),opacity .25s ease;
+  }
+  .cef-backdrop.show .cef-modal{transform:none;opacity:1}
+  .cef-modal-head{padding:18px 18px 8px;font-size:17px;font-weight:700;color:rgb(var(--accent))}
+  .cef-modal-body{padding:4px 18px 14px;font-size:14px;line-height:1.5;color:rgba(255,255,255,.85);overflow-y:auto}
+  .cef-modal-body input{
+    width:100%;margin-top:10px;padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.18);
+    background:rgba(255,255,255,.06);color:#fff;font-size:14px;outline:none;
+  }
+  .cef-modal-body input:focus{border-color:rgb(var(--accent))}
+  .cef-list{list-style:none;margin:6px 0 0;padding:0;max-height:44vh;overflow-y:auto}
+  .cef-list li{padding:11px 12px;border-radius:10px;margin-bottom:6px;background:rgba(255,255,255,.05);cursor:pointer}
+  .cef-list li:active,.cef-list li.sel{background:rgba(var(--accent),.22);color:rgb(var(--accent))}
+  .cef-modal-actions{display:flex;gap:10px;padding:6px 18px 18px}
+  .cef-btn{
+    flex:1;padding:11px 0;border-radius:12px;border:0;font:600 14px inherit;color:#fff;
+    background:rgba(255,255,255,.08);
+  }
+  .cef-btn.primary{background:rgb(var(--accent));color:#0b0e14}
+  .cef-btn:active{filter:brightness(.9)}
+
+  /* ===================== CONTEXT MENU ===================== */
+  .cef-ctxmenu{
+    position:fixed;min-width:180px;max-width:260px;background:rgba(18,21,28,.96);
+    border:1px solid rgba(var(--accent),.35);border-radius:14px;box-shadow:0 14px 34px rgba(0,0,0,.5);
+    overflow:hidden;z-index:99995;transform:scale(.94);opacity:0;transition:transform .18s ease,opacity .18s ease;
+  }
+  .cef-ctxmenu.show{transform:none;opacity:1}
+  .cef-ctxmenu .hd{padding:12px 14px 8px;font-size:13px;font-weight:700;color:rgb(var(--accent))}
+  .cef-ctxmenu .it{padding:12px 14px;font-size:14px;color:#fff;border-top:1px solid rgba(255,255,255,.06)}
+  .cef-ctxmenu .it:active{background:rgba(var(--accent),.18)}
+
+  /* ===================== INVENTORY ===================== */
+  .cef-inv-wrap{width:min(420px,92vw);max-height:80vh}
+  .cef-inv-grid{
+    display:grid;grid-template-columns:repeat(4,1fr);gap:10px;
+    padding:4px 18px 18px;max-height:60vh;overflow-y:auto;
+  }
+  .cef-inv-slot{
+    aspect-ratio:1/1;border-radius:14px;background:rgba(255,255,255,.06);
+    border:1px solid rgba(255,255,255,.12);display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:4px;padding:6px;text-align:center;
+  }
+  .cef-inv-slot:active{background:rgba(var(--accent),.2)}
+  .cef-inv-slot .nm{font-size:11px;color:#fff;line-height:1.2;word-break:break-word}
+  .cef-inv-slot .qt{font-size:10px;color:rgba(255,255,255,.55)}
+
   #demo{position:fixed;left:14px;bottom:14px;display:none;gap:8px;flex-wrap:wrap;z-index:9}
   #demo button{border:0;border-radius:10px;padding:10px 14px;font:600 13px inherit;color:#111;cursor:pointer}
-  @media (max-height:420px){.toast{min-height:56px;padding:10px 14px 12px 12px}}
 
-  /* Khung debug log tự vẽ - bật/tắt bằng biến DEBUG trong script bên dưới */
-  #dbg{
-    position:fixed;left:0;top:0;right:0;max-height:45vh;overflow-y:auto;
-    background:rgba(0,0,0,.85);color:#0f0;font:11px/1.4 monospace;
-    padding:6px 8px;z-index:999999;white-space:pre-wrap;word-break:break-all;
-    pointer-events:auto;border-bottom:2px solid #0f0;
-  }
+  #dbg{position:fixed;left:0;top:0;right:0;max-height:45vh;overflow-y:auto;background:rgba(0,0,0,.85);
+    color:#0f0;font:11px/1.4 monospace;padding:6px 8px;z-index:999999;white-space:pre-wrap;word-break:break-all;
+    pointer-events:auto;border-bottom:2px solid #0f0}
   #dbg .ln{border-bottom:1px dashed rgba(0,255,0,.2);padding:2px 0}
   #dbg .err{color:#ff6b6b}
 </style>
@@ -96,7 +138,6 @@
 
 <script>
 (function () {
-  // ===== BẬT/TẮT debug overlay tại đây. Để true khi cần soi lỗi, false khi chạy chính thức =====
   var DEBUG = false;
 
   var dbgBox = document.getElementById('dbg');
@@ -110,10 +151,55 @@
     dbgBox.appendChild(line);
     dbgBox.scrollTop = dbgBox.scrollHeight;
   }
-
   dlog('=== SCRIPT STARTED ===');
 
-  var MAX = 4, DEFAULT_MS = 3500;
+  function strip(s){ return String(s == null ? '' : s).replace(/\{[0-9a-fA-F]{6}\}/g, ''); }
+
+  // =====================================================================
+  // window.Cef - dinh nghia truc tiep tai trang, khong cho native inject.
+  // registerEventCallback: dang ky handler cho 1 event_name.
+  // __dispatch: native goi vao day (qua evaluateJavascript) khi co server-event.
+  // sendEvent: gui event nguoc ve server, qua AndroidCefBridge (JS -> Java).
+  // =====================================================================
+  var _cefCallbacks = {};
+  window.Cef = window.Cef || {};
+
+  window.Cef.registerEventCallback = function (eventName, callback) {
+    _cefCallbacks[eventName] = callback;
+    dlog('registerEventCallback OK: ' + eventName);
+  };
+
+  window.Cef.__dispatch = function (eventName, eventDataJson) {
+    dlog('EVENT ' + eventName + ' <- ' + (typeof eventDataJson === 'string' ? eventDataJson : JSON.stringify(eventDataJson)));
+    var cb = _cefCallbacks[eventName];
+    if (!cb) { dlog('Khong co callback cho event: ' + eventName, true); return; }
+    try {
+      cb(typeof eventDataJson === 'string' ? eventDataJson : JSON.stringify(eventDataJson));
+    } catch (e) {
+      dlog('Callback ' + eventName + ' loi: ' + e, true);
+    }
+  };
+
+  window.Cef.sendEvent = function (eventName, eventDataJson) {
+    var payload = typeof eventDataJson === 'string' ? eventDataJson : JSON.stringify(eventDataJson);
+    dlog('SEND ' + eventName + ' -> ' + payload);
+    if (window.AndroidCefBridge && window.AndroidCefBridge.sendEvent) {
+      window.AndroidCefBridge.sendEvent(eventName, payload);
+    } else {
+      dlog('AndroidCefBridge khong ton tai (dang chay ngoai app?)', true);
+    }
+  };
+
+  window.onerror = function (message, source, lineno) {
+    dlog('window.onerror: ' + message + ' @ line ' + lineno, true);
+    showToast('error', 'Loi Cu Phap JS', message, 6000);
+    return true;
+  };
+
+  /* ===================================================================
+   * 1) TOAST / NOTIFICATION  (event: cef_ui_notification)
+   * =================================================================== */
+  var MAX_TOAST = 4, DEFAULT_MS = 3500;
   var ICONS = {
     success:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5" opacity=".45"/><path class="d" d="M7.5 12.5l3.2 3.2 5.8-7"/></svg>',
     warning:'<svg viewBox="0 0 24 24"><path d="M12 3.2L2.6 20h18.8L12 3.2z" opacity=".45"/><path class="d" d="M12 9.5v4.6M12 17.4v.1"/></svg>',
@@ -123,14 +209,11 @@
   var TITLES = {success:'Success', warning:'Warning', error:'Error', info:'Info'};
   var stack = document.getElementById('stack');
 
-  function strip(s){ return String(s == null ? '' : s).replace(/\{[0-9a-fA-F]{6}\}/g, ''); }
-
-  function dismiss(el){
+  function dismissToast(el){
     if (!el || el._gone) return; el._gone = true;
     el.classList.remove('show'); el.classList.add('hide');
     setTimeout(function(){ el.parentNode && el.parentNode.removeChild(el); }, 320);
   }
-
   function attachSwipe(el){
     var sx = 0, dx = 0, on = false;
     el.addEventListener('pointerdown', function(e){ on = true; sx = e.clientX; dx = 0; el.classList.add('paused','drag'); el.setPointerCapture(e.pointerId); });
@@ -141,13 +224,11 @@
     function end(){
       if (!on) return; on = false; el.classList.remove('drag', 'paused');
       el.style.transform = ''; el.style.opacity = '';
-      if (dx > 70) dismiss(el);
+      if (dx > 70) dismissToast(el);
     }
     el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end);
   }
-
   function showToast(type, title, message, ms){
-    dlog('showToast() -> type=' + type + ' title=' + title + ' message=' + message + ' ms=' + ms);
     if (!ICONS[type]) type = 'info';
     title = strip(title); message = strip(message);
     ms = Math.max(1200, Math.min(15000, parseInt(ms, 10) || DEFAULT_MS));
@@ -156,8 +237,8 @@
     var key = type + '|' + title + '|' + message;
     if (last && !last._gone && last._key === key) return;
 
-    while (stack.querySelectorAll('.toast:not(.hide)').length >= MAX) {
-      dismiss(stack.querySelector('.toast:not(.hide)'));
+    while (stack.querySelectorAll('.toast:not(.hide)').length >= MAX_TOAST) {
+      dismissToast(stack.querySelector('.toast:not(.hide)'));
     }
 
     var el = document.createElement('div');
@@ -170,12 +251,12 @@
     var m = document.createElement('p'); m.className = 'msg'; m.textContent = message;
     box.appendChild(t); if (message) box.appendChild(m);
 
-    var x = document.createElement('button'); x.className = 'x'; x.innerHTML = '&times;'; x.setAttribute('aria-label', 'Close');
-    x.addEventListener('click', function(e){ e.stopPropagation(); dismiss(el); });
+    var x = document.createElement('button'); x.className = 'x'; x.innerHTML = '&times;';
+    x.addEventListener('click', function(e){ e.stopPropagation(); dismissToast(el); });
 
     var bar = document.createElement('div'); bar.className = 'bar';
     var fill = document.createElement('i'); fill.style.animationDuration = ms + 'ms';
-    fill.addEventListener('animationend', function(){ dismiss(el); });
+    fill.addEventListener('animationend', function(){ dismissToast(el); });
     bar.appendChild(fill);
 
     el.appendChild(ico); el.appendChild(box); el.appendChild(x); el.appendChild(bar);
@@ -183,80 +264,264 @@
     stack.appendChild(el);
     requestAnimationFrame(function(){ requestAnimationFrame(function(){ el.classList.add('show'); }); });
   }
-
   window.showToast = showToast;
-  window.clearToasts = function(){ [].slice.call(stack.children).forEach(dismiss); };
 
-  window.onerror = function(message, source, lineno, colno, error) {
-      dlog('window.onerror: ' + message + ' @ line ' + lineno, true);
-      showToast('error', 'Lỗi Cú Pháp JS', message, 6000);
-      return true;
-  };
-
-  // =====================================================================
-  // FIX CHÍNH: object "Cef" được native Android inject vào trang SAU khi
-  // script này đã chạy xong (không đồng bộ), nên kiểm tra "typeof Cef"
-  // đúng 1 lần lúc đầu luôn thấy "undefined" dù bridge thực ra vẫn hoạt
-  // động bình thường. Giải pháp: poll (kiểm tra lặp lại) mỗi 100ms cho
-  // tới khi Cef xuất hiện thật sự rồi mới registerEventCallback.
-  // =====================================================================
-  var pollAttempts = 0;
-  var maxPollAttempts = 100; // 100 x 100ms = tối đa 10 giây chờ
-
-  function registerCefCallbacks() {
-    dlog('Cef object FOUND sau ' + pollAttempts + ' lan poll (~' + (pollAttempts * 100) + 'ms). Dang ky callback...');
-
+  window.Cef.registerEventCallback("cef_ui_notification", function (json) {
     try {
-      Cef.registerEventCallback("cef_ui_notification", function (eventDataJson) {
-        dlog('EVENT RECEIVED cef_ui_notification: ' + eventDataJson);
-        try {
-          var data = JSON.parse(eventDataJson);
-          var title = data[0];
-          var message = data[1];
-          var type = data[2];
-          var duration = data[3];
-          showToast(type, title, message, duration);
-        } catch (e) {
-          dlog('JSON parse error: ' + e, true);
-        }
+      var d = JSON.parse(json);
+      showToast(d[2], d[0], d[1], d[3]); // [title, message, type, duration]
+    } catch (e) { dlog('notification JSON parse error: ' + e, true); }
+  });
+
+  /* ===================================================================
+   * 2) DIALOG: msgbox / input / password / list / confirm
+   *    (tat ca deu gui qua event "cef_ui_dialog_show", phan biet bang data[1])
+   * =================================================================== */
+  var curBackdrop = null;
+
+  function closeModal(){
+    if (!curBackdrop) return;
+    var b = curBackdrop; curBackdrop = null;
+    b.classList.remove('show');
+    setTimeout(function(){ b.parentNode && b.parentNode.removeChild(b); }, 220);
+    window.Cef.sendEvent("cef_ui_dialog_show_closed", "[]"); // tuy chon, khong bat buoc ben Pawn xu ly
+  }
+
+  function openBackdrop(innerEl){
+    closeModal();
+    var b = document.createElement('div');
+    b.className = 'cef-backdrop';
+    b.appendChild(innerEl);
+    document.body.appendChild(b);
+    curBackdrop = b;
+    requestAnimationFrame(function(){ requestAnimationFrame(function(){ b.classList.add('show'); }); });
+    return b;
+  }
+
+  function buildModalShell(title){
+    var modal = document.createElement('div'); modal.className = 'cef-modal';
+    var head = document.createElement('div'); head.className = 'cef-modal-head'; head.textContent = strip(title);
+    var body = document.createElement('div'); body.className = 'cef-modal-body';
+    var actions = document.createElement('div'); actions.className = 'cef-modal-actions';
+    modal.appendChild(head); modal.appendChild(body); modal.appendChild(actions);
+    return { modal: modal, body: body, actions: actions };
+  }
+
+  function addButtons(actions, label1, label2, onPrimary, onSecondary){
+    if (label2) {
+      var b2 = document.createElement('button'); b2.className = 'cef-btn'; b2.textContent = strip(label2) || 'Cancel';
+      b2.addEventListener('click', onSecondary);
+      actions.appendChild(b2);
+    }
+    var b1 = document.createElement('button'); b1.className = 'cef-btn primary'; b1.textContent = strip(label1) || 'OK';
+    b1.addEventListener('click', onPrimary);
+    actions.appendChild(b1);
+  }
+
+  window.Cef.registerEventCallback("cef_ui_dialog_show", function (json) {
+    var data;
+    try { data = JSON.parse(json); } catch (e) { dlog('dialog_show parse error: ' + e, true); return; }
+
+    var dialogid = data[0];
+    var type = data[1];
+    var title = data[2];
+
+    if (type === 'msgbox' || type === 'input' || type === 'password') {
+      var message = data[3], button1 = data[4], button2 = data[5];
+      var shell = buildModalShell(title);
+      var msgP = document.createElement('p'); msgP.textContent = strip(message);
+      shell.body.appendChild(msgP);
+
+      var inputEl = null;
+      if (type === 'input' || type === 'password') {
+        inputEl = document.createElement('input');
+        inputEl.type = (type === 'password') ? 'password' : 'text';
+        shell.body.appendChild(inputEl);
+      }
+
+      function respond(response){
+        var text = inputEl ? inputEl.value : '';
+        window.Cef.sendEvent('cef_ui_dialog_response', JSON.stringify([dialogid, response, text]));
+        closeModal();
+      }
+      addButtons(shell.actions, button1, button2, function(){ respond(1); }, function(){ respond(0); });
+      openBackdrop(shell.modal);
+      if (inputEl) setTimeout(function(){ inputEl.focus(); }, 250);
+
+    } else if (type === 'confirm') {
+      var cMessage = data[3], yesLabel = data[4], noLabel = data[5];
+      var cShell = buildModalShell(title);
+      var cMsgP = document.createElement('p'); cMsgP.textContent = strip(cMessage);
+      cShell.body.appendChild(cMsgP);
+
+      function respondConfirm(response){
+        window.Cef.sendEvent('cef_ui_confirm_dialog_response', JSON.stringify([dialogid, response]));
+        closeModal();
+      }
+      addButtons(cShell.actions, yesLabel, noLabel, function(){ respondConfirm(1); }, function(){ respondConfirm(0); });
+      openBackdrop(cShell.modal);
+
+    } else if (type === 'list') {
+      var items = data[3] || [];
+      var lButton1 = data[4], lButton2 = data[5];
+      var lShell = buildModalShell(title);
+      var ul = document.createElement('ul'); ul.className = 'cef-list';
+      var selectedIndex = -1;
+
+      items.forEach(function (item, idx) {
+        var li = document.createElement('li');
+        var label = (typeof item === 'string') ? item : (item && item.name) || JSON.stringify(item);
+        li.textContent = strip(label);
+        li.addEventListener('click', function () {
+          var prev = ul.querySelector('li.sel'); if (prev) prev.classList.remove('sel');
+          li.classList.add('sel'); selectedIndex = idx;
+        });
+        ul.appendChild(li);
       });
-      dlog('registerEventCallback() OK.');
-    } catch (e) {
-      dlog('registerEventCallback() THREW: ' + e, true);
-    }
+      lShell.body.appendChild(ul);
 
-    var demo = document.getElementById('demo');
-    if (demo) demo.style.display = 'none';
+      function respondList(response){
+        var idx = selectedIndex >= 0 ? selectedIndex : 0;
+        var val = items[idx];
+        var valStr = (typeof val === 'string') ? val : (val && val.name) || '';
+        window.Cef.sendEvent('cef_ui_list_dialog_response', JSON.stringify([dialogid, response, idx, valStr]));
+        closeModal();
+      }
+      addButtons(lShell.actions, lButton1, lButton2, function(){ respondList(1); }, function(){ respondList(0); });
+      openBackdrop(lShell.modal);
+    } else {
+      dlog('cef_ui_dialog_show: type khong xac dinh: ' + type, true);
+    }
+  });
+
+  /* ===================================================================
+   * 3) CONTEXT MENU  (event: cef_ui_context_menu_show)
+   * =================================================================== */
+  var curCtxMenu = null;
+  function closeCtxMenu(){
+    if (!curCtxMenu) return;
+    var m = curCtxMenu; curCtxMenu = null;
+    m.classList.remove('show');
+    setTimeout(function(){ m.parentNode && m.parentNode.removeChild(m); }, 180);
   }
 
-  function pollForCef() {
-    pollAttempts++;
-    if (typeof Cef !== 'undefined') {
-      registerCefCallbacks();
-      return;
+  window.Cef.registerEventCallback("cef_ui_context_menu_show", function (json) {
+    var data;
+    try { data = JSON.parse(json); } catch (e) { dlog('context_menu parse error: ' + e, true); return; }
+
+    var menuId = data[0], title = data[1], options = data[2] || [];
+    closeCtxMenu();
+
+    var menu = document.createElement('div'); menu.className = 'cef-ctxmenu';
+    menu.style.left = 'calc(50% - 100px)';
+    menu.style.top = '30%';
+
+    if (title) {
+      var hd = document.createElement('div'); hd.className = 'hd'; hd.textContent = strip(title);
+      menu.appendChild(hd);
     }
-    if (pollAttempts >= maxPollAttempts) {
-      dlog('Cef VAN undefined sau ' + maxPollAttempts + ' lan poll. Bridge co the khong ton tai o APK nay.', true);
-      showDemoMode();
-      return;
+    options.forEach(function (opt, idx) {
+      var it = document.createElement('div'); it.className = 'it';
+      var label = (typeof opt === 'string') ? opt : (opt && opt.name) || JSON.stringify(opt);
+      it.textContent = strip(label);
+      it.addEventListener('click', function () {
+        window.Cef.sendEvent('cef_ui_context_menu_response', JSON.stringify([menuId, idx, label]));
+        closeCtxMenu();
+      });
+      menu.appendChild(it);
+    });
+
+    document.body.appendChild(menu);
+    curCtxMenu = menu;
+    requestAnimationFrame(function(){ requestAnimationFrame(function(){ menu.classList.add('show'); }); });
+  });
+
+  /* ===================================================================
+   * 4) AUDIO  (events: cef_ui_audio_play / cef_ui_audio_stop / cef_ui_audio_volume)
+   * =================================================================== */
+  var audioEl = null;
+  function ensureAudio(){
+    if (!audioEl) {
+      audioEl = document.createElement('audio');
+      audioEl.style.display = 'none';
+      document.body.appendChild(audioEl);
     }
-    setTimeout(pollForCef, 100);
+    return audioEl;
   }
 
-  function showDemoMode() {
+  window.Cef.registerEventCallback("cef_ui_audio_play", function (json) {
+    var data;
+    try { data = JSON.parse(json); } catch (e) { dlog('audio_play parse error: ' + e, true); return; }
+    var url = data[0], loop = !!data[1], volume = (typeof data[2] === 'number') ? data[2] : 1.0;
+
+    var a = ensureAudio();
+    a.src = url; a.loop = loop; a.volume = Math.max(0, Math.min(1, volume));
+    a.play().catch(function (e) { dlog('audio play() bi chan: ' + e, true); });
+  });
+
+  window.Cef.registerEventCallback("cef_ui_audio_stop", function () {
+    if (audioEl) { audioEl.pause(); audioEl.currentTime = 0; }
+  });
+
+  window.Cef.registerEventCallback("cef_ui_audio_volume", function (json) {
+    var data;
+    try { data = JSON.parse(json); } catch (e) { return; }
+    if (audioEl && typeof data[0] === 'number') audioEl.volume = Math.max(0, Math.min(1, data[0]));
+  });
+
+  /* ===================================================================
+   * 5) INVENTORY  (events: cef_ui_inventory_open / cef_ui_inventory_close,
+   *    response: cef_ui_inventory_use)
+   * =================================================================== */
+  window.Cef.registerEventCallback("cef_ui_inventory_open", function (json) {
+    var data;
+    try { data = JSON.parse(json); } catch (e) { dlog('inventory_open parse error: ' + e, true); return; }
+    var items = data[0] || [];
+
+    var wrap = document.createElement('div'); wrap.className = 'cef-modal cef-inv-wrap';
+    var head = document.createElement('div'); head.className = 'cef-modal-head'; head.textContent = 'Inventory';
+    var grid = document.createElement('div'); grid.className = 'cef-inv-grid';
+
+    items.forEach(function (item, slot) {
+      var name = (typeof item === 'string') ? item : (item && item.name) || '';
+      var qty = (item && item.qty != null) ? item.qty : '';
+
+      var cell = document.createElement('div'); cell.className = 'cef-inv-slot';
+      var nm = document.createElement('div'); nm.className = 'nm'; nm.textContent = strip(name);
+      cell.appendChild(nm);
+      if (qty !== '') {
+        var qt = document.createElement('div'); qt.className = 'qt'; qt.textContent = 'x' + qty;
+        cell.appendChild(qt);
+      }
+      cell.addEventListener('click', function () {
+        window.Cef.sendEvent('cef_ui_inventory_use', JSON.stringify([slot, name]));
+      });
+      grid.appendChild(cell);
+    });
+
+    wrap.appendChild(head); wrap.appendChild(grid);
+    openBackdrop(wrap);
+  });
+
+  window.Cef.registerEventCallback("cef_ui_inventory_close", function () {
+    closeModal();
+  });
+
+  /* ===================================================================
+   * Demo mode - chi bat khi khong chay trong app (khong co AndroidCefBridge),
+   * de tien test giao dien tren trinh duyet thuong.
+   * =================================================================== */
+  if (!window.AndroidCefBridge) {
     var demo = document.getElementById('demo'); demo.style.display = 'flex';
-    if (demo.childElementCount > 0) return;
     [['success','#34d399','Purchase completed!'],['warning','#fbbf24','Fuel is running low.'],
      ['error','#f87171','Not enough money.'],['info','#60a5fa','Press Y to open the phone.']].forEach(function(b){
       var btn = document.createElement('button'); btn.textContent = b[0]; btn.style.background = b[1];
       btn.onclick = function(){ showToast(b[0], '', b[2], 4000); }; demo.appendChild(btn);
     });
+    dlog('Khong thay AndroidCefBridge -> bat demo mode (chi de test giao dien).', true);
   }
 
-  dlog('Bat dau poll cho Cef (moi 100ms, toi da ' + maxPollAttempts + ' lan)...');
-  pollForCef();
-
-  dlog('=== SCRIPT INIT DONE (dang cho Cef neu chua san sang) ===');
+  dlog('=== SCRIPT INIT DONE - window.Cef ho tro: notification, dialog, list, confirm, context menu, audio, inventory ===');
 })();
 </script>
 </body>
