@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Toast</title>
+<title>Toast CEF</title>
 <style>
   :root{
     --safe-t:env(safe-area-inset-top,0px);
@@ -14,10 +14,11 @@
     font-family:"Inter",-apple-system,"Segoe UI",Roboto,"Noto Sans Thai","Noto Sans",sans-serif;
     -webkit-user-select:none;user-select:none}
 
+  /* ĐÃ SỬA: Thêm z-index: 99999 để đảm bảo thông báo luôn nằm trên cùng, không bị game che mất */
   #stack{
     position:fixed;top:calc(var(--safe-t) + 14px);right:calc(var(--safe-r) + 14px);
     width:min(360px,92vw);display:flex;flex-direction:column;gap:10px;
-    pointer-events:none;
+    pointer-events:none; z-index: 99999; 
   }
 
   .toast{
@@ -155,34 +156,18 @@
     requestAnimationFrame(function(){ requestAnimationFrame(function(){ el.classList.add('show'); }); });
   }
 
+  // Đẩy hàm ra toàn cục để Pawn có thể gọi được
   window.showToast = showToast;
   window.clearToasts = function(){ [].slice.call(stack.children).forEach(dismiss); };
 
-  // Lắng nghe linh hoạt các sự kiện từ Pawn / SAMPMobileCef
-  function bind(){
-    if (typeof Cef === 'undefined') return false;
-    
-    var eventNames = ['cef_ui_notification', 'notification', 'ShowNotification', 'toast'];
-    eventNames.forEach(function(eventName) {
-      Cef.registerEventCallback(eventName, function(json){
-        try {
-          var d = typeof json === 'string' ? JSON.parse(json) : json;
-          if (Array.isArray(d)) {
-            showToast(String(d[2] || 'info').toLowerCase(), d[0], d[1], d[3]);
-          } else if (d) {
-            showToast(String(d.type || 'info').toLowerCase(), d.title, d.message, d.duration);
-          }
-        } catch (e) { console.log('toast parse error', e); }
-      });
-    });
-    return true;
-  }
+  // ĐÃ THÊM: Bộ bắt lỗi JS (Bắt buộc phải có để debug)
+  // Nếu lệnh CefExecuteJavaScript từ game bị sai cú pháp, nó sẽ hiện lỗi lên màn hình
+  window.onerror = function(message, source, lineno, colno, error) {
+      showToast('error', 'Lỗi Cú Pháp JS', message, 6000);
+      return true;
+  };
 
-  if (!bind()) {
-    var tries = 0, iv = setInterval(function(){ if (bind() || ++tries > 20) clearInterval(iv); }, 250);
-  }
-
-  // Demo mode: chỉ hiện khi mở trực tiếp trên trình duyệt ngoài (không có CEF)
+  // Demo mode
   if (typeof Cef === 'undefined') {
     var demo = document.getElementById('demo'); demo.style.display = 'flex';
     [['success','#34d399','Purchase completed!'],['warning','#fbbf24','Fuel is running low.'],
